@@ -21,11 +21,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional
 
 import numpy as np
+import json
 import torch
 import torchvision
 import viser
 import viser.theme
 import viser.transforms as vtf
+from torchvision.utils import save_image
 from nerfstudio.cameras.camera_optimizers import CameraOptimizer
 from nerfstudio.cameras.cameras import CameraType
 from nerfstudio.configs import base_config as cfg
@@ -396,9 +398,18 @@ class Viewer:
         self.camera_handles: Dict[int, viser.CameraFrustumHandle] = {}
         self.original_c2w: Dict[int, np.ndarray] = {}
         image_indices = self._pick_drawn_image_idxs(len(train_dataset))
+        def scale(x):
+            return tuple([z * VISER_NERFSTUDIO_SCALE_RATIO for z in list(x)])
+        self.viser_server.add_label("test1","=START=",position=scale((0.01026475,-0.04470124,-0.24673722)))
+        self.viser_server.add_label("test2","==END==",position=scale((0.0046543,-0.05070926,-0.3248854)))
+        save_Rt = {}
         for idx in image_indices:
             image = train_dataset[idx]["image"]
             camera = train_dataset.cameras[idx]
+            image_path = Path(f"output_for_mt/{idx}.png")
+            image_path.parent.mkdir(exist_ok=True)
+            save_image(image,f"{image_path}")
+            
             image_uint8 = (image * 255).detach().type(torch.uint8)
             image_uint8 = image_uint8.permute(2, 0, 1)
             image_uint8 = torchvision.transforms.functional.resize(image_uint8, 100, antialias=None)  # type: ignore
@@ -416,10 +427,36 @@ class Viewer:
                 wxyz=R.wxyz,
                 position=c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO,
             )
+            print(f"/cameras/camera_{idx:05d}")
+            print(c2w)
+            print(VISER_NERFSTUDIO_SCALE_RATIO)
+            save_Rt[f"/cameras/camera_{idx:05d}"] = c2w
+
+            json_files = image_path.parent / Path("transforms.json")
+            if json_files.exists():
+                data = json.load(open(json_files))
+            else:
+                data = {}
+
+            data[f"/cameras/camera_{idx:05d}"] = {
+                "c2w": c2w,
+                "wxyz": R.wxyz,
+                "position": c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO
+            }
+            with open(json_files,"w"):
+                json.dumps(data)
 
             @camera_handle.on_click
             def _(event: viser.SceneNodePointerEvent[viser.CameraFrustumHandle]) -> None:
                 with event.client.atomic():
+                    R = vtf.SO3.from_quaternion_xyzw(event.target.wxyz)
+                    mat = np.zeros((4,4))
+                    mat[-1,-1] = 1
+                    mat[:3,:3] = R.as_matrix()
+                    mat[:3,3] = event.target.position
+                    print("==matrix==")
+                    for row in mat:
+                        print("[" + ', '.join(map(str, row)) + "],")
                     event.client.camera.position = event.target.position
                     event.client.camera.wxyz = event.target.wxyz
 
