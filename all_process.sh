@@ -37,4 +37,7 @@ ns-process-data video --data "$video" --output-dir "$output" --sfm-tool hloc
 ns-train nerfacto --vis viewer --data "$output"
 
 # Export command commented out. Uncomment to enable export functionality.
-# ns-export poisson --load-config outputs/test2/nerfacto/2024-01-17_191700/config.yml --output-dir exports/mesh/ --normal-output-name rgb
+cfg=`find . -name "config.yml" | xargs ls -lt | awk '{ print $NF }' | grep -v '^$' | head -n 1`
+ns-export poisson --load-config $cfg --output-dir $output --normal-output-name rgb
+echo "Output:"
+echo $output
