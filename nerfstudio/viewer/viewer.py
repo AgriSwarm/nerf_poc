@@ -408,7 +408,8 @@ class Viewer:
             camera = train_dataset.cameras[idx]
             image_path = Path(f"output_for_mt/{idx}.png")
             image_path.parent.mkdir(exist_ok=True)
-            save_image(image,f"{image_path}")
+            print(image.shape)
+            save_image(image.permute(2,0,1),f"{image_path}")
             
             image_uint8 = (image * 255).detach().type(torch.uint8)
             image_uint8 = image_uint8.permute(2, 0, 1)
@@ -438,13 +439,14 @@ class Viewer:
             else:
                 data = {}
 
+            position = c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO
             data[f"/cameras/camera_{idx:05d}"] = {
-                "c2w": c2w,
-                "wxyz": R.wxyz,
-                "position": c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO
+                "c2w": c2w.tolist(),
+                "wxyz": R.wxyz.tolist(),
+                "position": position.tolist()
             }
-            with open(json_files,"w"):
-                json.dumps(data)
+            with open(json_files,"w") as f:
+                json.dump(data,f)
 
             @camera_handle.on_click
             def _(event: viser.SceneNodePointerEvent[viser.CameraFrustumHandle]) -> None:
