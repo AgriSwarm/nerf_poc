@@ -44,6 +44,7 @@ from nerfstudio.viewer.render_state_machine import RenderAction, RenderStateMach
 from nerfstudio.viewer.utils import CameraState, parse_object
 from nerfstudio.viewer.viewer_elements import ViewerControl, ViewerElement
 from typing_extensions import assert_never
+from tqdm import tqdm
 
 if TYPE_CHECKING:
     from nerfstudio.engine.trainer import Trainer
@@ -403,12 +404,11 @@ class Viewer:
         self.viser_server.add_label("test1","=START=",position=scale((0.01026475,-0.04470124,-0.24673722)))
         self.viser_server.add_label("test2","==END==",position=scale((0.0046543,-0.05070926,-0.3248854)))
         save_Rt = {}
-        for idx in image_indices:
+        for idx in tqdm(image_indices):
             image = train_dataset[idx]["image"]
             camera = train_dataset.cameras[idx]
             image_path = Path(f"output_for_mt/{idx}.png")
             image_path.parent.mkdir(exist_ok=True)
-            print(image.shape)
             save_image(image.permute(2,0,1),f"{image_path}")
             
             image_uint8 = (image * 255).detach().type(torch.uint8)
@@ -428,9 +428,7 @@ class Viewer:
                 wxyz=R.wxyz,
                 position=c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO,
             )
-            print(f"/cameras/camera_{idx:05d}")
-            print(c2w)
-            print(VISER_NERFSTUDIO_SCALE_RATIO)
+            camera_params = {key : getattr(camera,key).detach().cpu().numpy().tolist() for key in "fx,fy,cx,cy,width,height,distortion_params".split(",")}
             save_Rt[f"/cameras/camera_{idx:05d}"] = c2w
 
             json_files = image_path.parent / Path("transforms.json")
@@ -443,7 +441,8 @@ class Viewer:
             data[f"/cameras/camera_{idx:05d}"] = {
                 "c2w": c2w.tolist(),
                 "wxyz": R.wxyz.tolist(),
-                "position": position.tolist()
+                "position": position.tolist(),
+                "camera_params": camera_params
             }
             with open(json_files,"w") as f:
                 json.dump(data,f)
